@@ -1,5 +1,6 @@
 const express = require('express');
 const crypto = a= require('crypto');
+const cloudinary = require('cloudinary').v2;
 
 // Middleware to parse JSON bodies
 const app = express();
@@ -70,7 +71,7 @@ async function getShiprocketToken() {
 // Health check route
 app.get('/', (req, res) => {
     res.status(200).json({
-        message: 'Shiprocket API integration backend is running.'
+        message: ' backend is running.'
     });
 });
 
@@ -203,5 +204,5 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
     // Authenticate with Shiprocket when the server starts
-    getShiprocketToken();
+    // getShiprocketToken();
 });

@@ -1,9 +1,9 @@
 {
   "dependencies": {
+    "cloudinary": "^2.7.0",
     "express": "^5.1.0"
   },
   "scripts": {
     "start": "node index.js"
   }
-  
 }
