@@ -185,7 +185,7 @@ app.post("/api/payment-status", async (req, res) => {
     }
 
 
-    const response = await client.phonePeClient.checkStatus(transactionId);
+    const response = await client.checkStatus(transactionId);
     if (response && response.success) {
       console.log("Payment status retrieved successfully. Response:", response);
       res.status(200).json({
