@@ -113,6 +113,14 @@ app.post("/api/upload", (req, res) => {
   });
 });
 
+
+const client = StandardCheckoutClient.getInstance(
+  process.env.CLIENT_ID,
+  process.env.CLIENT_SECRET,
+  process.env.CLIENT_VERSION,
+  Env.PRODUCTION
+);
+
 // 2. Create Payment Route (Using the SDK)
 app.post("/api/create-payment", async (req, res) => {
   try {
@@ -130,12 +138,6 @@ app.post("/api/create-payment", async (req, res) => {
       });
     }
 
-    const client = StandardCheckoutClient.getInstance(
-      process.env.CLIENT_ID,
-      process.env.CLIENT_SECRET,
-      process.env.CLIENT_VERSION,
-      Env.PRODUCTION
-    );
 
     const metaInfo = MetaInfo.builder().udf1("udf1").udf2("udf2").build();
     const merchantOrderId = transactionId;
@@ -182,12 +184,6 @@ app.post("/api/payment-status", async (req, res) => {
         .json({ success: false, message: "Transaction ID is required." });
     }
 
-    const client = StandardCheckoutClient.getInstance(
-      process.env.CLIENT_ID,
-      process.env.CLIENT_SECRET,
-      process.env.CLIENT_VERSION,
-      Env.SANDBOX
-    );
 
     const response = await client.getPaymentStatus(transactionId);
     if (response && response.success) {
