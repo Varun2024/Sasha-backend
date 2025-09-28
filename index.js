@@ -190,7 +190,7 @@ app.post("/api/payment-status", async (req, res) => {
       console.log("Payment status retrieved successfully. Response:", response);
       res.status(200).json({
         success: true,
-        data: response.data,
+        state: response.state,
       });
     } else {
       console.error("PhonePe API call failed. Response:", response);
