@@ -186,7 +186,7 @@ app.post("/api/payment-status", async (req, res) => {
 
 
     const response = await client.getOrderStatus(transactionId);
-    if (response && response.success) {
+    if (response && response.state === "COMPLETED") {
       console.log("Payment status retrieved successfully. Response:", response);
       res.status(200).json({
         success: true,
