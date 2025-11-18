@@ -3,6 +3,7 @@ import { v2 as cloudinary } from "cloudinary";
 import { CloudinaryStorage } from "multer-storage-cloudinary";
 import cors from "cors";
 import multer from "multer";
+import axios from "axios";
 import {
   StandardCheckoutClient,
   Env,
@@ -18,16 +19,18 @@ const app = express();
 app.use(express.json());
 // app.use(express.urlencoded({ extended: true }));
 const allowedOrigins = ["http://localhost:5173", "https://sashastore.in"];
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"));
-    }
-  },
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+  })
+);
 
 // --- ADD THIS DEBUG BLOCK ---
 console.log("\n==============================================");
@@ -113,7 +116,6 @@ app.post("/api/upload", (req, res) => {
   });
 });
 
-
 const client = StandardCheckoutClient.getInstance(
   process.env.CLIENT_ID,
   process.env.CLIENT_SECRET,
@@ -138,7 +140,6 @@ app.post("/api/create-payment", async (req, res) => {
       });
     }
 
-
     const metaInfo = MetaInfo.builder().udf1("udf1").udf2("udf2").build();
     const merchantOrderId = transactionId;
     const request = StandardCheckoutPayRequest.builder()
@@ -148,7 +149,7 @@ app.post("/api/create-payment", async (req, res) => {
       .metaInfo(metaInfo)
       .build();
 
-    const response = await client.pay(request)
+    const response = await client.pay(request);
     if (response && response.redirectUrl) {
       console.log("Payment initiated successfully. Response:", response);
       res.status(200).json({
@@ -156,12 +157,13 @@ app.post("/api/create-payment", async (req, res) => {
         transactionId: transactionId,
         redirectUrl: response.redirectUrl,
       });
+      // Send invoice email
     } else {
       console.error("PhonePe API call failed. Response:", response);
       res.status(500).json({
-          success: false,
-          message: response?.message || "Payment initiation failed.",
-        });
+        success: false,
+        message: response?.message || "Payment initiation failed.",
+      });
     }
   } catch (error) {
     console.error("Internal Server Error:", error);
@@ -170,8 +172,6 @@ app.post("/api/create-payment", async (req, res) => {
       .json({ success: false, message: "An internal server error occurred." });
   }
 });
-
-
 
 // 3. Payment Status Route (Webhook or Redirect Handling)
 app.post("/api/payment-status", async (req, res) => {
@@ -183,7 +183,6 @@ app.post("/api/payment-status", async (req, res) => {
         .status(400)
         .json({ success: false, message: "Transaction ID is required." });
     }
-
 
     const response = await client.getOrderStatus(transactionId);
     if (response && response.state === "COMPLETED") {
@@ -207,6 +206,160 @@ app.post("/api/payment-status", async (req, res) => {
   }
 });
 
+const DELHI_API_KEY = process.env.DELHI_API_KEY;
+const DELHI_BASE_URL = process.env.DELHI_BASE_URL;
+
+// ✅ Axios client (no default Content-Type here)
+const delhiveryClient = axios.create({
+  baseURL: "https://track.delhivery.com",
+  headers: {
+    Authorization: `Token ${process.env.DELHI_API_KEY}`,
+    Accept: "application/json",
+  },
+});
+
+app.post("/api/create-shipment", async (req, res) => {
+  const shipmentId = `order-${Date.now()}`;
+
+  const shipmentData = {
+    shipments: [
+      {
+        add: req.body.destination_address,
+        phone: req.body.destination_phone,
+        name: req.body.destination_name,
+        pin: req.body.destination_pincode,
+        order: shipmentId,
+        products_desc: req.body.products_desc || "NA",
+        hsn_code: req.body.hsn_code || "NA",
+        cod_amount: req.body.total_amount,
+        payment_mode: req.body.payment_mode,
+        total_amount: req.body.total_amount,
+        quantity: req.body.quantity,
+        weight: 0.5,
+        shipment_length: 200,
+        shipment_width: 200,
+        shipment_height: 10,
+        client: "Sasha store",
+        origin: "RAIPUR",
+        return_add: "Shop 10/31 Nigam complex opp hanuman mandir Shankar nagar",
+        return_pin: 492004,
+        return_city: "Raipur",
+        return_state: "Chhattisgarh",
+        return_country: "India",
+      },
+    ],
+    pickup_location: { name: "Sasha store" }, // must be object
+  };
+
+  console.log("pickup_location.name:", shipmentData.pickup_location.name);
+  console.log("client:", shipmentData.shipments[0].client);
+
+  // pincode serviceability check
+  try {
+    const options = {
+      method: "GET",
+      url: "https://track.delhivery.com/c/api/pin-codes/json/?filter_codes=492004",
+      headers: { Authorization: `Token ${process.env.DELHI_API_KEY}` },
+    };
+
+    const pinResponse = await axios.request(options);
+    console.log("\n📍 Pincode Serviceability Response:\n", pinResponse);
+    if (
+      pinResponse.data &&
+      pinResponse.data.pin_codes &&
+      pinResponse.data.pin_codes.length > 0 &&
+      pinResponse.data.pin_codes[0].serviceable
+    ) {
+      console.log("Pincode is serviceable.");
+    } else {
+      console.log("Pincode is not serviceable.");
+      console.log(pinResponse.data.pin_codes)
+    }
+  } catch (err) {
+    console.error("Pincode serviceability check failed:", err);
+  }
+
+  // try {
+  //   // Form-urlencoded payload
+  //   const payload = `format=json&data=${JSON.stringify(shipmentData)}`;
+
+  //   console.log("\n📦 Payload Sent to Delhivery:\n", payload);
+
+  //   const response = await axios.post(
+  //     "https://track.delhivery.com/api/cmu/create.json",
+  //     payload,
+  //     {
+  //       headers: {
+  //         "Content-Type": "application/x-www-form-urlencoded",
+  //         Accept: "application/json",
+  //         Authorization: `Token ${process.env.DELHI_API_KEY}`,
+  //       },
+  //     }
+  //   );
+
+  //   console.log("\n✅ Delhivery API Response:\n", response.data);
+
+  //   if (response.data.success) {
+  //     res.status(200).json({
+  //       success: true,
+  //       message: "Shipment created successfully!",
+  //       data: response.data,
+  //     });
+  //   } else {
+  //     res.status(400).json({
+  //       success: false,
+  //       message: "Failed to create shipment.",
+  //       error: response.data.rmk || "Unknown error from Delhivery",
+  //     });
+  //   }
+  // } catch (error) {
+  //   console.error(
+  //     "\n❌ Error creating shipment:",
+  //     error.response ? error.response.data : error.message
+  //   );
+  //   res.status(500).json({
+  //     success: false,
+  //     message: "An internal server error occurred.",
+  //     error: error.response ? error.response.data : error.message,
+  //   });
+  // }
+});
+/*
+=================================================
+          🚚 TRACK A SHIPMENT 🚚
+=================================================
+*/
+app.get("/api/track/:waybill_id", async (req, res) => {
+  const { waybill_id } = req.params;
+
+  if (!waybill_id) {
+    return res
+      .status(400)
+      .json({ success: false, message: "Waybill ID is required." });
+  }
+
+  try {
+    const url = `/api/v1/packages/json/?wn=${waybill_id}`;
+    const response = await delhiveryClient.get(url);
+
+    console.log("Delhivery Tracking Response:", response.data);
+
+    res.status(200).json({
+      success: true,
+      data: response.data,
+    });
+  } catch (error) {
+    console.error(
+      "Error tracking shipment:",
+      error.response ? error.response.data : error.message
+    );
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch tracking data.",
+      error: error.response ? error.response.data : "Network Error",
+    });
+  }
+});
 
 /**
  * ==============================================================================
